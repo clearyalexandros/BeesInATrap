@@ -7,9 +7,10 @@ import (
 )
 
 func main() {
-	fmt.Println("Welcome to BeesInTheTrap!")
-	
-	// Initialize game
-	g := &game.Game{}
-	_ = g // TODO: Start main game loop
+	fmt.Println("Starting Bees in the Trap...")
+
+	g := game.NewGame()
+	g.Start()
+
+	// TODO: Implement game loop
 }
