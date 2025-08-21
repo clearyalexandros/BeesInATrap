@@ -16,7 +16,7 @@ type Bee struct {
 	IsAlive bool
 }
 
-// NewBee creates a new bee with the appropriate stats based on type
+// NewBee creates a new bee with stats based on what type it is
 func NewBee(beeType BeeType) *Bee {
 	bee := &Bee{
 		Type:    beeType,
@@ -41,7 +41,7 @@ func NewBee(beeType BeeType) *Bee {
 	return bee
 }
 
-// TakeDamage applies damage to the bee based on its type
+// TakeDamage hits the bee and deals damage based on what type it is
 func (b *Bee) TakeDamage() {
 	var damage int
 	switch b.Type {
@@ -60,7 +60,7 @@ func (b *Bee) TakeDamage() {
 	}
 }
 
-// String returns a string representation of the bee type
+// String returns the name of the bee type as a string
 func (bt BeeType) String() string {
 	switch bt {
 	case Queen:

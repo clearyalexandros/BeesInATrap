@@ -12,5 +12,6 @@ func main() {
 	g := game.NewGame()
 	g.Start()
 
-	// TODO: Implement game loop
+	// Let's play!
+	g.PlayGame()
 }
