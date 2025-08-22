@@ -2,15 +2,36 @@
 
 A simple turn-based command-line game in Go.
 
+## Project Structure
+
+```
+BeesInATrap/
+├── cmd/beesinthetrap/     # Application entry point
+│   └── main.go
+├── internal/game/         # Game logic 
+│   ├── bee.go
+│   ├── player.go
+│   ├── game.go
+│   └── game_test.go
+├── go.mod                 # Go module definition
+└── README.md
+```
+
 ## Setup
 
 1. Build for Windows:
-   go build -o beesinthetrap.exe
+   ```
+   go build -o beesinthetrap.exe ./cmd/beesinthetrap
+   ```
 
 ## Run
 
-    go run main.go
+```
+go run ./cmd/beesinthetrap
+```
 
 ## Test
 
-    go test
+```
+go test ./internal/game
+```
