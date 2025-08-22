@@ -50,7 +50,7 @@ func TestNewGame(t *testing.T) {
 	}
 }
 
-func TestBeeStats(t *testing.T) {
+func TestBeeInitialStats(t *testing.T) {
 	// Test Queen bee stats
 	queen := NewBee(Queen)
 	if queen.HP != 100 || queen.MaxHP != 100 || queen.Damage != 10 {
@@ -301,7 +301,7 @@ func TestPlayerTakeDamage(t *testing.T) {
 	}
 }
 
-func TestGameOver(t *testing.T) {
+func TestIsGameOverConditions(t *testing.T) {
 	game := NewGame()
 
 	// Game should not be over at start
