@@ -82,3 +82,31 @@ go run ./cmd/beesinthetrap
 ```bash
 go test ./internal/game
 ```
+
+## Docker Deployment
+
+### Build and Run
+
+```bash
+# Build the image
+docker build -t beesinthetrap:latest .
+
+# Run interactively
+docker run -it --rm beesinthetrap:latest
+```
+
+### Docker Compose
+
+```bash
+# Run with interactive terminal (recommended)
+docker-compose run --rm beesinthetrap
+
+# Auto-play mode
+echo "auto" | docker-compose run --rm beesinthetrap
+```
+
+### Features
+
+- ✅ **18.5MB image** - Optimized multi-stage build
+- ✅ **Secure** - Non-root user execution  
+- ✅ **Interactive** - Full terminal support for gameplay

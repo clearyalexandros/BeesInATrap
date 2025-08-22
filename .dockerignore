@@ -1,0 +1,38 @@
+# Build artifacts
+*.exe
+beesinthetrap
+beesinthetrap-*
+
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+
+# Test coverage
+*.out
+coverage.html
+
+# Binaries for other platforms
+beesinthetrap-windows.exe
+beesinthetrap-linux
+
+# Docker files (except Dockerfile)
+docker-compose.yml
+.dockerignore
