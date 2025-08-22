@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -21,6 +22,13 @@ const (
 	DroneCount  = 25
 	TotalBees   = QueenCount + WorkerCount + DroneCount
 )
+
+// BeeDecision represents a bee's decision to attack or miss
+type BeeDecision struct {
+	Bee          *Bee
+	WillHit      bool
+	DecisionTime time.Duration // How long the bee took to decide
+}
 
 type Game struct {
 	Player    *Player            // Use pointer so we can modify the player
@@ -237,7 +245,7 @@ func (g *Game) PlayerAttack() {
 	}
 }
 
-// BeeTurn makes the bees attack back
+// BeeTurn makes the bees attack back using concurrent decision making
 func (g *Game) BeeTurn() {
 	fmt.Printf("\n--- Turn %d: Bees Turn ---\n", g.Turns)
 
@@ -246,25 +254,89 @@ func (g *Game) BeeTurn() {
 		return
 	}
 
-	// Sometimes the bees all miss you
-	if g.rng.Float64() < BeesMissChance {
-		randomBee := aliveBees[g.rng.Intn(len(aliveBees))]
-		fmt.Printf("Buzz! That was close! The %s Bee just missed you!\n", randomBee.Type.String())
-		return
+	// Channel to collect bee decisions
+	decisionChan := make(chan BeeDecision, len(aliveBees))
+	var wg sync.WaitGroup
+
+	// Each bee makes a decision concurrently
+	for _, bee := range aliveBees {
+		wg.Add(1)
+		go func(b *Bee) {
+			defer wg.Done()
+			decision := g.makeBeeDecision(b)
+			decisionChan <- decision
+		}(bee)
 	}
 
-	// Pick a random bee to sting you
-	attackingBee := aliveBees[g.rng.Intn(len(aliveBees))]
+	// Wait for all bees to make decisions
+	go func() {
+		wg.Wait()
+		close(decisionChan)
+	}()
 
-	fmt.Printf("Sting! You just got stung by a %s bee!\n", attackingBee.Type.String())
+	// Collect all decisions
+	var hits []BeeDecision
+	var misses []BeeDecision
+	totalDecisionTime := time.Duration(0)
 
-	// Take damage from the bee
-	g.Player.TakeDamage(attackingBee.Damage)
+	for decision := range decisionChan {
+		totalDecisionTime += decision.DecisionTime
+		if decision.WillHit {
+			hits = append(hits, decision)
+		} else {
+			misses = append(misses, decision)
+		}
+	}
 
-	fmt.Printf("You took %d damage and now have %d HP remaining.\n", attackingBee.Damage, g.Player.HP)
+	// Display thinking time (for demonstration)
+	fmt.Printf("🧠 Bees consulted for %v total...\n", totalDecisionTime)
 
-	if !g.Player.IsAlive() {
-		fmt.Println("💀 You have been stung to death! 💀")
+	// Execute attack based on decisions
+	if len(hits) > 0 {
+		// Random successful attack from the hits
+		chosenAttack := hits[g.rng.Intn(len(hits))]
+		fmt.Printf("Sting! You just got stung by a %s bee!\n", chosenAttack.Bee.Type.String())
+
+		g.Player.TakeDamage(chosenAttack.Bee.Damage)
+		fmt.Printf("You took %d damage and now have %d HP remaining.\n",
+			chosenAttack.Bee.Damage, g.Player.HP)
+
+		if !g.Player.IsAlive() {
+			fmt.Println("💀 You have been stung to death! 💀")
+		}
+	} else if len(misses) > 0 {
+		// All bees missed - show a random miss
+		chosenMiss := misses[g.rng.Intn(len(misses))]
+		fmt.Printf("Buzz! That was close! The %s Bee just missed you!\n",
+			chosenMiss.Bee.Type.String())
+	}
+}
+
+// makeBeeDecision simulates a bee making an attack decision concurrently
+func (g *Game) makeBeeDecision(bee *Bee) BeeDecision {
+	start := time.Now()
+
+	// Simulate different thinking times based on bee type
+	var thinkingTime time.Duration
+	switch bee.Type {
+	case Queen:
+		thinkingTime = time.Duration(50+g.rng.Intn(100)) * time.Millisecond // 50-150ms
+	case Worker:
+		thinkingTime = time.Duration(20+g.rng.Intn(60)) * time.Millisecond // 20-80ms
+	case Drone:
+		thinkingTime = time.Duration(10+g.rng.Intn(40)) * time.Millisecond // 10-50ms
+	}
+
+	// Simulate thinking
+	time.Sleep(thinkingTime)
+
+	// Make the hit/miss decision
+	willHit := g.rng.Float64() >= BeesMissChance
+
+	return BeeDecision{
+		Bee:          bee,
+		WillHit:      willHit,
+		DecisionTime: time.Since(start),
 	}
 }
 
