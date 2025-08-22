@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  beesinthetrap:
+    build: .
+    stdin_open: true
+    tty: true
+    container_name: bees-game
+    restart: no
+    # Note: Use 'docker-compose run --rm beesinthetrap' for interactive play
+    
+  # Optional: Development environment with volume mount
+  beesinthetrap-dev:
+    build: .
+    stdin_open: true
+    tty: true
+    container_name: bees-game-dev
+    volumes:
+      - .:/app
+    working_dir: /app
+    restart: no
+    profiles:
+      - dev
