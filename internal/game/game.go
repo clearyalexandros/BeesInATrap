@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -22,27 +23,61 @@ const (
 	TotalBees   = QueenCount + WorkerCount + DroneCount
 )
 
+// BeeDecision represents a bee's decision to attack or miss
+type BeeDecision struct {
+	Bee          *Bee
+	WillHit      bool
+	DecisionTime time.Duration // How long the bee took to decide
+}
+
 type Game struct {
-	Player    *Player            // Use pointer so we can modify the player
-	Hive      map[BeeType][]*Bee // Map structure enables O(1) access to bees by type
-	AliveBees []*Bee             // Cached slice avoids O(n) scanning on each access
-	Turns     int
-	AutoMode  bool
-	rng       *rand.Rand
+	Player      *Player            // Use pointer so we can modify the player
+	Hive        map[BeeType][]*Bee // Map structure enables O(1) access to bees by type
+	AliveBees   []*Bee             // Cached slice avoids O(n) scanning on each access
+	Turns       int
+	AutoMode    bool
+	rng         *rand.Rand
+	damageEvent chan int // Channel to signal damage events for stats monitoring
 }
 
 // NewGame sets up a fresh game with a player and a full hive of bees
 func NewGame() *Game {
 	game := &Game{
-		Player:    &Player{HP: PlayerStartingHP, MaxHP: PlayerStartingHP},
-		Hive:      make(map[BeeType][]*Bee),
-		AliveBees: make([]*Bee, 0, TotalBees),
-		Turns:     0,
-		AutoMode:  false,
-		rng:       rand.New(rand.NewSource(time.Now().UnixNano())),
+		Player:      &Player{HP: PlayerStartingHP, MaxHP: PlayerStartingHP},
+		Hive:        make(map[BeeType][]*Bee),
+		AliveBees:   make([]*Bee, 0, TotalBees),
+		Turns:       0,
+		AutoMode:    false,
+		rng:         rand.New(rand.NewSource(time.Now().UnixNano())),
+		damageEvent: make(chan int, 10), // Buffered channel for damage events
 	}
 
 	game.initializeHive()
+
+	// Start event-driven game stats monitor
+	go func() {
+		for damage := range game.damageEvent {
+			if game.Turns > 0 { // Only show stats after game starts
+				aliveBees := len(game.GetAliveBees())
+				survivalRate := float64(game.Player.HP) / float64(game.Player.MaxHP) * 100
+
+				// Show different messages based on damage severity
+				var damageIcon string
+				switch {
+				case damage >= 10:
+					damageIcon = "🩸" // High damage
+				case damage >= 5:
+					damageIcon = "⚡" // Medium damage
+				default:
+					damageIcon = "🔸" // Low damage
+				}
+
+				fmt.Printf("%s Damage Alert: -%d HP | Turn %d | Player: %d/%d (%.1f%%) | Bees: %d\n",
+					damageIcon, damage, game.Turns, game.Player.HP, game.Player.MaxHP, survivalRate, aliveBees)
+			}
+		}
+	}()
+
 	return game
 } // initializeHive populates the hive with all the bees according to the game rules
 func (g *Game) initializeHive() {
@@ -237,7 +272,7 @@ func (g *Game) PlayerAttack() {
 	}
 }
 
-// BeeTurn makes the bees attack back
+// BeeTurn makes the bees attack back using concurrent decision making
 func (g *Game) BeeTurn() {
 	fmt.Printf("\n--- Turn %d: Bees Turn ---\n", g.Turns)
 
@@ -246,25 +281,96 @@ func (g *Game) BeeTurn() {
 		return
 	}
 
-	// Sometimes the bees all miss you
-	if g.rng.Float64() < BeesMissChance {
-		randomBee := aliveBees[g.rng.Intn(len(aliveBees))]
-		fmt.Printf("Buzz! That was close! The %s Bee just missed you!\n", randomBee.Type.String())
-		return
+	// Channel to collect bee decisions
+	decisionChan := make(chan BeeDecision, len(aliveBees))
+	var wg sync.WaitGroup
+
+	// Each bee makes a decision concurrently
+	for _, bee := range aliveBees {
+		wg.Add(1)
+		go func(b *Bee) {
+			defer wg.Done()
+			decision := g.makeBeeDecision(b)
+			decisionChan <- decision
+		}(bee)
 	}
 
-	// Pick a random bee to sting you
-	attackingBee := aliveBees[g.rng.Intn(len(aliveBees))]
+	// Wait for all bees to make decisions
+	go func() {
+		wg.Wait()
+		close(decisionChan)
+	}()
 
-	fmt.Printf("Sting! You just got stung by a %s bee!\n", attackingBee.Type.String())
+	// Collect all decisions
+	var hits []BeeDecision
+	var misses []BeeDecision
+	totalDecisionTime := time.Duration(0)
 
-	// Take damage from the bee
-	g.Player.TakeDamage(attackingBee.Damage)
+	for decision := range decisionChan {
+		totalDecisionTime += decision.DecisionTime
+		if decision.WillHit {
+			hits = append(hits, decision)
+		} else {
+			misses = append(misses, decision)
+		}
+	}
 
-	fmt.Printf("You took %d damage and now have %d HP remaining.\n", attackingBee.Damage, g.Player.HP)
+	// Display thinking time (for demonstration)
+	fmt.Printf("🧠 Bees consulted for %v total...\n", totalDecisionTime)
 
-	if !g.Player.IsAlive() {
-		fmt.Println("💀 You have been stung to death! 💀")
+	// Execute attack based on decisions
+	if len(hits) > 0 {
+		// Random successful attack from the hits
+		chosenAttack := hits[g.rng.Intn(len(hits))]
+		fmt.Printf("Sting! You just got stung by a %s bee!\n", chosenAttack.Bee.Type.String())
+
+		damage := chosenAttack.Bee.Damage
+		g.Player.TakeDamage(damage)
+		fmt.Printf("You took %d damage and now have %d HP remaining.\n", damage, g.Player.HP)
+
+		// Trigger damage event for stats monitoring
+		select {
+		case g.damageEvent <- damage:
+		default:
+			// Channel full, skip this event (non-blocking)
+		}
+
+		if !g.Player.IsAlive() {
+			fmt.Println("💀 You have been stung to death! 💀")
+		}
+	} else if len(misses) > 0 {
+		// All bees missed - show a random miss
+		chosenMiss := misses[g.rng.Intn(len(misses))]
+		fmt.Printf("Buzz! That was close! The %s Bee just missed you!\n",
+			chosenMiss.Bee.Type.String())
+	}
+}
+
+// makeBeeDecision simulates a bee making an attack decision concurrently
+func (g *Game) makeBeeDecision(bee *Bee) BeeDecision {
+	start := time.Now()
+
+	// Simulate different thinking times based on bee type
+	var thinkingTime time.Duration
+	switch bee.Type {
+	case Queen:
+		thinkingTime = time.Duration(50+g.rng.Intn(100)) * time.Millisecond // 50-150ms
+	case Worker:
+		thinkingTime = time.Duration(20+g.rng.Intn(60)) * time.Millisecond // 20-80ms
+	case Drone:
+		thinkingTime = time.Duration(10+g.rng.Intn(40)) * time.Millisecond // 10-50ms
+	}
+
+	// Simulate thinking
+	time.Sleep(thinkingTime)
+
+	// Make the hit/miss decision
+	willHit := g.rng.Float64() >= BeesMissChance
+
+	return BeeDecision{
+		Bee:          bee,
+		WillHit:      willHit,
+		DecisionTime: time.Since(start),
 	}
 }
 
