@@ -1,6 +1,93 @@
 # BeesInTheTrap
 
-A turn-based command-line game in Go that demonstrates concurrent programming with goroutines and channels.
+A turn-based command-line game in Go where you battle against a hive of bees! Destroy all the bees before they sting you to death.
+
+## 🎮 How to Play
+
+### Game Objective
+
+Your mission is simple: **Destroy the entire hive before the bees sting you to death!**
+
+### Starting the Game
+
+When you run the game, you'll see:
+
+- Your health: **100/100 HP**
+- The hive composition: **1 Queen, 5 Workers, 25 Drones** (31 bees total)
+- A command prompt asking for your action
+
+### User Commands
+
+The game accepts three simple commands:
+
+| Command | Description |
+|---------|-------------|
+| `hit` | Attack the hive - you'll target a random bee |
+| `auto` | Switch to automatic mode - the game plays itself |
+| `quit` | Exit the game immediately |
+
+### Game Flow
+
+#### 1. **Player Turn**
+
+- Type `hit` to attack the hive
+- You have a **15% chance to miss** completely
+- If you hit, you'll damage a random bee:
+  - **Queen**: Takes 10 damage (100 HP total)
+  - **Worker**: Takes 25 damage (75 HP total)
+  - **Drone**: Takes 30 damage (60 HP total)
+- **Special Rule**: Killing the Queen instantly eliminates all remaining bees!
+
+#### 2. **Bees Turn**
+
+- All living bees "think" simultaneously using goroutines
+- Each bee has a **20% chance to miss** their attack
+- If they hit, damage varies by bee type:
+  - **Queen**: 10 damage per sting 🩸
+  - **Worker**: 5 damage per sting ⚡
+  - **Drone**: 1 damage per sting 🔸
+- Real-time damage alerts show your health status
+
+#### 3. **Victory Conditions**
+
+- **You Win**: Eliminate all bees (or kill the Queen)
+- **You Lose**: Your HP reaches 0
+
+### Example Gameplay Session
+
+```text
+Welcome to Bees in the Trap!
+Your mission: Destroy the hive before the bees sting you to death!
+
+=== Game Status ===
+Player HP: 100/100
+Alive Bees:
+  Queens: 1
+  Workers: 5  
+  Drones: 25
+Turns: 0
+
+Enter command (hit/auto/quit): hit
+
+--- Turn 1: Player Turn ---
+Direct Hit! You attacked a Drone bee!
+The Drone bee took 30 damage and has 30 HP remaining.
+
+--- Turn 1: Bees Turn ---
+🧠 Bees consulted for 1.2s total...
+Sting! You just got stung by a Worker bee!
+You took 5 damage and now have 95 HP remaining.
+⚡ Damage Alert: -5 HP | Turn 1 | Player: 95/100 (95.0%) | Bees: 31
+
+Enter command (hit/auto/quit): auto
+Switching to auto mode...
+```
+
+### Auto Mode
+
+- Type `auto` to let the computer play automatically
+- The game continues until victory or defeat
+- Perfect for demonstrations or when you want to watch the AI battle!
 
 ## Concurrency Features
 
