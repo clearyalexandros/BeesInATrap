@@ -9,58 +9,88 @@ import (
 	"time"
 )
 
+// Game configuration constants
+const (
+	PlayerMissChance = 0.15 // 15% chance for player to miss
+	BeesMissChance   = 0.20 // 20% chance for all bees to miss
+	AutoModeDelay    = 500  // Milliseconds to pause in auto mode
+
+	// Hive composition
+	QueenCount  = 1
+	WorkerCount = 5
+	DroneCount  = 25
+	TotalBees   = QueenCount + WorkerCount + DroneCount
+)
+
 type Game struct {
-	Player   *Player
-	Hive     []*Bee
-	Turns    int
-	AutoMode bool
-	rng      *rand.Rand
+	Player    *Player            // Use pointer so we can modify the player
+	Hive      map[BeeType][]*Bee // Map structure enables O(1) access to bees by type
+	AliveBees []*Bee             // Cached slice avoids O(n) scanning on each access
+	Turns     int
+	AutoMode  bool
+	rng       *rand.Rand
 }
 
 // NewGame sets up a fresh game with a player and a full hive of bees
 func NewGame() *Game {
 	game := &Game{
-		Player:   NewPlayer(),
-		Hive:     make([]*Bee, 0, 31), // Space for 1 Queen + 5 Workers + 25 Drones
-		Turns:    0,
-		AutoMode: false,
-		rng:      rand.New(rand.NewSource(time.Now().UnixNano())),
+		Player:    &Player{HP: PlayerStartingHP, MaxHP: PlayerStartingHP},
+		Hive:      make(map[BeeType][]*Bee),
+		AliveBees: make([]*Bee, 0, TotalBees),
+		Turns:     0,
+		AutoMode:  false,
+		rng:       rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 
 	game.initializeHive()
 	return game
 } // initializeHive populates the hive with all the bees according to the game rules
 func (g *Game) initializeHive() {
-	// Add the one and only Queen Bee
-	g.Hive = append(g.Hive, NewBee(Queen))
+	// Initialize the map slices
+	g.Hive[Queen] = make([]*Bee, 0, QueenCount)
+	g.Hive[Worker] = make([]*Bee, 0, WorkerCount)
+	g.Hive[Drone] = make([]*Bee, 0, DroneCount)
+
+	// Add the Queen Bees
+	for i := 0; i < QueenCount; i++ {
+		bee := NewBee(Queen)
+		g.Hive[Queen] = append(g.Hive[Queen], bee)
+		g.AliveBees = append(g.AliveBees, bee)
+	}
 
 	// Add the Worker Bees
-	for i := 0; i < 5; i++ {
-		g.Hive = append(g.Hive, NewBee(Worker))
+	for i := 0; i < WorkerCount; i++ {
+		bee := NewBee(Worker)
+		g.Hive[Worker] = append(g.Hive[Worker], bee)
+		g.AliveBees = append(g.AliveBees, bee)
 	}
 
 	// Add the Drone Bees
-	for i := 0; i < 25; i++ {
-		g.Hive = append(g.Hive, NewBee(Drone))
+	for i := 0; i < DroneCount; i++ {
+		bee := NewBee(Drone)
+		g.Hive[Drone] = append(g.Hive[Drone], bee)
+		g.AliveBees = append(g.AliveBees, bee)
 	}
 }
 
-// GetAliveBees gives you all the bees that are still buzzing around
+// GetAliveBees gives you all the bees that are still alive
 func (g *Game) GetAliveBees() []*Bee {
-	var aliveBees []*Bee
-	for _, bee := range g.Hive {
-		if bee.IsAlive {
+	// Rebuild the alive list by filtering out dead bees
+	aliveBees := make([]*Bee, 0, len(g.AliveBees))
+	for _, bee := range g.AliveBees {
+		if bee.IsAlive() {
 			aliveBees = append(aliveBees, bee)
 		}
 	}
+	g.AliveBees = aliveBees // Update the cached list
 	return aliveBees
 }
 
-// GetBeesByType finds all living bees of a particular type
+// GetBeesByType finds all living bees of a particular type (O(1) map access to type group)
 func (g *Game) GetBeesByType(beeType BeeType) []*Bee {
 	var bees []*Bee
-	for _, bee := range g.Hive {
-		if bee.IsAlive && bee.Type == beeType {
+	for _, bee := range g.Hive[beeType] {
+		if bee.IsAlive() {
 			bees = append(bees, bee)
 		}
 	}
@@ -81,12 +111,14 @@ func (g *Game) IsGameOver() bool {
 
 // KillAllBees wipes out the entire hive (happens when the Queen dies)
 func (g *Game) KillAllBees() {
-	for _, bee := range g.Hive {
-		if bee.IsAlive {
-			bee.IsAlive = false
-			bee.HP = 0
+	for _, beeList := range g.Hive {
+		for _, bee := range beeList {
+			if bee.IsAlive() {
+				bee.HP = 0
+			}
 		}
 	}
+	g.AliveBees = []*Bee{} // Clear the alive list
 }
 
 // PrintGameStatus shows the current state of the battle
@@ -122,7 +154,7 @@ func (g *Game) PlayGame() {
 		if g.AutoMode {
 			// Let the computer play automatically
 			g.PlayerTurn("hit")
-			time.Sleep(500 * time.Millisecond) // Small pause so you can follow along
+			time.Sleep(AutoModeDelay * time.Millisecond) // Small pause so you can follow along
 		} else {
 			// Wait for the player to tell us what to do
 			fmt.Print("\nEnter command (hit/auto/quit): ")
@@ -179,7 +211,7 @@ func (g *Game) PlayerAttack() {
 	}
 
 	// Sometimes you miss completely
-	if g.rng.Float64() < 0.15 {
+	if g.rng.Float64() < PlayerMissChance {
 		fmt.Println("Miss! You just missed the hive, better luck next time!")
 		return
 	}
@@ -192,7 +224,7 @@ func (g *Game) PlayerAttack() {
 	// Hit the bee
 	targetBee.TakeDamage()
 
-	if !targetBee.IsAlive {
+	if !targetBee.IsAlive() {
 		fmt.Printf("You killed the %s bee! (%d damage dealt)\n", targetBee.Type.String(), g.getDamageDealtTo(targetBee.Type))
 
 		// Special rule: killing the Queen kills everyone
@@ -215,7 +247,7 @@ func (g *Game) BeeTurn() {
 	}
 
 	// Sometimes the bees all miss you
-	if g.rng.Float64() < 0.20 {
+	if g.rng.Float64() < BeesMissChance {
 		randomBee := aliveBees[g.rng.Intn(len(aliveBees))]
 		fmt.Printf("Buzz! That was close! The %s Bee just missed you!\n", randomBee.Type.String())
 		return
@@ -238,16 +270,7 @@ func (g *Game) BeeTurn() {
 
 // getDamageDealtTo tells you how much damage each bee type takes when hit
 func (g *Game) getDamageDealtTo(beeType BeeType) int {
-	switch beeType {
-	case Queen:
-		return 10
-	case Worker:
-		return 25
-	case Drone:
-		return 30
-	default:
-		return 0
-	}
+	return BeeStatsTable[beeType].TakesDamage
 }
 
 // EndGame shows the final results and says goodbye

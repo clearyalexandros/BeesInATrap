@@ -1,15 +1,20 @@
 package game
 
+// Player configuration constants
+const (
+	PlayerStartingHP = 100
+)
+
 type Player struct {
 	HP    int
 	MaxHP int
 }
 
 // NewPlayer creates a new player starting with full health
-func NewPlayer() *Player {
-	return &Player{
-		HP:    100,
-		MaxHP: 100,
+func NewPlayer() Player {
+	return Player{
+		HP:    PlayerStartingHP,
+		MaxHP: PlayerStartingHP,
 	}
 }
 
@@ -22,6 +27,6 @@ func (p *Player) TakeDamage(damage int) {
 }
 
 // IsAlive checks if the player still has health left
-func (p *Player) IsAlive() bool {
+func (p Player) IsAlive() bool {
 	return p.HP > 0
 }

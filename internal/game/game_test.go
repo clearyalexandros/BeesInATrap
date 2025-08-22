@@ -21,18 +21,15 @@ func TestNewPlayer(t *testing.T) {
 func TestNewGame(t *testing.T) {
 	game := NewGame()
 
-	// Test player initialization
-	if game.Player == nil {
-		t.Error("Expected game to have a player")
+	// Test player initialization - Player is now a value type, not pointer
+	if game.Player.HP != PlayerStartingHP {
+		t.Errorf("Expected player to start with %d HP, got %d", PlayerStartingHP, game.Player.HP)
 	}
 
-	if game.Player.HP != 100 {
-		t.Errorf("Expected player to start with 100 HP, got %d", game.Player.HP)
-	}
-
-	// Test hive initialization
-	if len(game.Hive) != 31 {
-		t.Errorf("Expected hive to have 31 bees, got %d", len(game.Hive))
+	// Test hive initialization - now using total alive bees count
+	aliveBees := game.GetAliveBees()
+	if len(aliveBees) != TotalBees {
+		t.Errorf("Expected hive to have %d bees, got %d", TotalBees, len(aliveBees))
 	}
 
 	// Count bee types
@@ -104,7 +101,7 @@ func TestQueenBeeDamage(t *testing.T) {
 		t.Errorf("Queen should start with 100/100 HP, got %d/%d", queen.HP, queen.MaxHP)
 	}
 
-	if !queen.IsAlive {
+	if !queen.IsAlive() {
 		t.Error("Queen should be alive initially")
 	}
 
@@ -115,7 +112,7 @@ func TestQueenBeeDamage(t *testing.T) {
 		if queen.HP != expectedHP {
 			t.Errorf("After %d hits, Queen should have %d HP, got %d", i, expectedHP, queen.HP)
 		}
-		if !queen.IsAlive {
+		if !queen.IsAlive() {
 			t.Errorf("Queen should still be alive after %d hits", i)
 		}
 	}
@@ -125,7 +122,7 @@ func TestQueenBeeDamage(t *testing.T) {
 	if queen.HP != 0 {
 		t.Errorf("Queen should have 0 HP after 10 hits, got %d", queen.HP)
 	}
-	if queen.IsAlive {
+	if queen.IsAlive() {
 		t.Error("Queen should be dead after 10 hits")
 	}
 }
@@ -138,7 +135,7 @@ func TestWorkerBeeDamage(t *testing.T) {
 		t.Errorf("Worker should start with 75/75 HP, got %d/%d", worker.HP, worker.MaxHP)
 	}
 
-	if !worker.IsAlive {
+	if !worker.IsAlive() {
 		t.Error("Worker should be alive initially")
 	}
 
@@ -147,7 +144,7 @@ func TestWorkerBeeDamage(t *testing.T) {
 	if worker.HP != 50 {
 		t.Errorf("After 1 hit, Worker should have 50 HP, got %d", worker.HP)
 	}
-	if !worker.IsAlive {
+	if !worker.IsAlive() {
 		t.Error("Worker should still be alive after 1 hit")
 	}
 
@@ -156,7 +153,7 @@ func TestWorkerBeeDamage(t *testing.T) {
 	if worker.HP != 25 {
 		t.Errorf("After 2 hits, Worker should have 25 HP, got %d", worker.HP)
 	}
-	if !worker.IsAlive {
+	if !worker.IsAlive() {
 		t.Error("Worker should still be alive after 2 hits")
 	}
 
@@ -165,7 +162,7 @@ func TestWorkerBeeDamage(t *testing.T) {
 	if worker.HP != 0 {
 		t.Errorf("Worker should have 0 HP after 3 hits, got %d", worker.HP)
 	}
-	if worker.IsAlive {
+	if worker.IsAlive() {
 		t.Error("Worker should be dead after 3 hits")
 	}
 }
@@ -178,7 +175,7 @@ func TestDroneBeeDamage(t *testing.T) {
 		t.Errorf("Drone should start with 60/60 HP, got %d/%d", drone.HP, drone.MaxHP)
 	}
 
-	if !drone.IsAlive {
+	if !drone.IsAlive() {
 		t.Error("Drone should be alive initially")
 	}
 
@@ -187,7 +184,7 @@ func TestDroneBeeDamage(t *testing.T) {
 	if drone.HP != 30 {
 		t.Errorf("After 1 hit, Drone should have 30 HP, got %d", drone.HP)
 	}
-	if !drone.IsAlive {
+	if !drone.IsAlive() {
 		t.Error("Drone should still be alive after 1 hit")
 	}
 
@@ -196,7 +193,7 @@ func TestDroneBeeDamage(t *testing.T) {
 	if drone.HP != 0 {
 		t.Errorf("Drone should have 0 HP after 2 hits, got %d", drone.HP)
 	}
-	if drone.IsAlive {
+	if drone.IsAlive() {
 		t.Error("Drone should be dead after 2 hits")
 	}
 }
@@ -237,7 +234,7 @@ func TestBeeTypeDamageValues(t *testing.T) {
 				if bee.HP != expectedHP {
 					t.Errorf("After %d hits, %s should have %d HP, got %d", hit, test.beeType.String(), expectedHP, bee.HP)
 				}
-				if !bee.IsAlive {
+				if !bee.IsAlive() {
 					t.Errorf("%s should still be alive after %d hits", test.beeType.String(), hit)
 				}
 			}
@@ -247,7 +244,7 @@ func TestBeeTypeDamageValues(t *testing.T) {
 			if bee.HP != 0 {
 				t.Errorf("%s should have 0 HP after %d hits, got %d", test.beeType.String(), test.hitsToKill, bee.HP)
 			}
-			if bee.IsAlive {
+			if bee.IsAlive() {
 				t.Errorf("%s should be dead after %d hits", test.beeType.String(), test.hitsToKill)
 			}
 		})
@@ -277,7 +274,7 @@ func TestBeeExcessiveDamage(t *testing.T) {
 			if bee.HP != 0 {
 				t.Errorf("%s HP should not go below 0, got %d", test.name, bee.HP)
 			}
-			if bee.IsAlive {
+			if bee.IsAlive() {
 				t.Errorf("%s should be dead after excessive damage", test.name)
 			}
 		})
@@ -341,7 +338,7 @@ func TestQueenDeathRule(t *testing.T) {
 		queen.TakeDamage()
 	}
 
-	if queen.IsAlive {
+	if queen.IsAlive() {
 		t.Error("Queen should be dead after taking full damage")
 	}
 

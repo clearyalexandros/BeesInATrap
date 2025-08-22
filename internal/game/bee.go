@@ -1,62 +1,74 @@
 package game
 
+// Bee configuration constants
+const (
+	// Queen Bee stats
+	QueenHP          = 100
+	QueenDamage      = 10
+	QueenTakesDamage = 10
+
+	// Worker Bee stats
+	WorkerHP          = 75
+	WorkerDamage      = 5
+	WorkerTakesDamage = 25
+
+	// Drone Bee stats
+	DroneHP          = 60
+	DroneDamage      = 1
+	DroneTakesDamage = 30
+)
+
 type BeeType int
 
 const (
-	Queen  BeeType = 0
-	Worker BeeType = 1
-	Drone  BeeType = 2
+	Queen BeeType = iota
+	Worker
+	Drone
 )
 
+// BeeStats holds all the stats for a particular bee type
+type BeeStats struct {
+	HP          int
+	Damage      int
+	TakesDamage int
+}
+
+// BeeStatsTable provides O(1) lookup for bee stats by type (map access vs switch statements)
+var BeeStatsTable = map[BeeType]BeeStats{
+	Queen:  {HP: QueenHP, Damage: QueenDamage, TakesDamage: QueenTakesDamage},
+	Worker: {HP: WorkerHP, Damage: WorkerDamage, TakesDamage: WorkerTakesDamage},
+	Drone:  {HP: DroneHP, Damage: DroneDamage, TakesDamage: DroneTakesDamage},
+}
+
 type Bee struct {
-	Type    BeeType
-	HP      int
-	MaxHP   int
-	Damage  int
-	IsAlive bool
+	Type   BeeType
+	HP     int
+	MaxHP  int
+	Damage int
 }
 
 // NewBee creates a new bee with stats based on what type it is
 func NewBee(beeType BeeType) *Bee {
-	bee := &Bee{
-		Type:    beeType,
-		IsAlive: true,
+	stats := BeeStatsTable[beeType]
+	return &Bee{
+		Type:   beeType,
+		HP:     stats.HP,
+		MaxHP:  stats.HP,
+		Damage: stats.Damage,
 	}
+}
 
-	switch beeType {
-	case Queen:
-		bee.HP = 100
-		bee.MaxHP = 100
-		bee.Damage = 10
-	case Worker:
-		bee.HP = 75
-		bee.MaxHP = 75
-		bee.Damage = 5
-	case Drone:
-		bee.HP = 60
-		bee.MaxHP = 60
-		bee.Damage = 1
-	}
-
-	return bee
+// IsAlive checks if the bee still has health left
+func (b *Bee) IsAlive() bool {
+	return b.HP > 0
 }
 
 // TakeDamage hits the bee and deals damage based on what type it is
 func (b *Bee) TakeDamage() {
-	var damage int
-	switch b.Type {
-	case Queen:
-		damage = 10
-	case Worker:
-		damage = 25
-	case Drone:
-		damage = 30
-	}
-
-	b.HP -= damage
-	if b.HP <= 0 {
+	stats := BeeStatsTable[b.Type]
+	b.HP -= stats.TakesDamage
+	if b.HP < 0 {
 		b.HP = 0
-		b.IsAlive = false
 	}
 }
 
