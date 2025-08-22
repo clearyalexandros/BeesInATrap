@@ -43,10 +43,32 @@ BeesInATrap/
 
 ## Setup
 
-1. Build for Windows:
+### Cross-Platform Compilation
+
+Build executable binaries for both Windows and Linux:
+
+1. **Build for Windows:**
 
    ```bash
-   go build -o beesinthetrap.exe ./cmd/beesinthetrap
+   # Unix/Linux/macOS
+   GOOS=windows GOARCH=amd64 go build -o beesinthetrap.exe ./cmd/beesinthetrap
+   ```
+
+   ```powershell
+   # Windows PowerShell
+   $env:GOOS="windows"; $env:GOARCH="amd64"; go build -o beesinthetrap.exe ./cmd/beesinthetrap
+   ```
+
+2. **Build for Linux:**
+
+   ```bash
+   # Unix/Linux/macOS
+   GOOS=linux GOARCH=amd64 go build -o beesinthetrap ./cmd/beesinthetrap
+   ```
+
+   ```powershell
+   # Windows PowerShell
+   $env:GOOS="linux"; $env:GOARCH="amd64"; go build -o beesinthetrap ./cmd/beesinthetrap
    ```
 
 ## Run
