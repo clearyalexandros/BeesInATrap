@@ -161,8 +161,37 @@ Build executable binaries for both Windows and Linux:
 ## Run
 
 ```bash
+# Run with default settings
 go run ./cmd/beesinthetrap
+
+# Run with custom configuration
+go run ./cmd/beesinthetrap --player-hp 150 --player-miss 0.10 --bees-miss 0.30
+
+# Create a custom hive composition
+go run ./cmd/beesinthetrap --queens 2 --workers 10 --drones 50
+
+# Easy mode (high player HP, low miss chance, slow bees)
+go run ./cmd/beesinthetrap --player-hp 200 --player-miss 0.05 --bees-miss 0.40
+
+# Hard mode (low player HP, high miss chance, fast auto mode)
+go run ./cmd/beesinthetrap --player-hp 50 --player-miss 0.25 --bees-miss 0.10 --auto-delay 200
+
+# See all configuration options
+go run ./cmd/beesinthetrap --help
 ```
+
+### Configuration Flags
+
+| Flag | Description | Default | Range |
+|------|-------------|---------|-------|
+| `--player-hp` | Starting health points for the player | 100 | > 0 |
+| `--player-miss` | Player miss chance | 0.15 (15%) | 0.0-1.0 |
+| `--bees-miss` | Bees miss chance | 0.20 (20%) | 0.0-1.0 |
+| `--auto-delay` | Auto mode delay in milliseconds | 500 | ≥ 0 |
+| `--queens` | Number of Queen bees in the hive | 1 | ≥ 0 |
+| `--workers` | Number of Worker bees in the hive | 5 | ≥ 0 |
+| `--drones` | Number of Drone bees in the hive | 25 | ≥ 0 |
+| `--help` | Show help information | - | - |
 
 ## Test
 

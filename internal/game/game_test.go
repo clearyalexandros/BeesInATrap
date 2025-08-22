@@ -28,8 +28,9 @@ func TestNewGame(t *testing.T) {
 
 	// Test hive initialization - now using total alive bees count
 	aliveBees := game.GetAliveBees()
-	if len(aliveBees) != TotalBees {
-		t.Errorf("Expected hive to have %d bees, got %d", TotalBees, len(aliveBees))
+	expectedTotal := DefaultQueenCount + DefaultWorkerCount + DefaultDroneCount
+	if len(aliveBees) != expectedTotal {
+		t.Errorf("Expected hive to have %d bees, got %d", expectedTotal, len(aliveBees))
 	}
 
 	// Count bee types

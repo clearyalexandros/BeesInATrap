@@ -12,16 +12,41 @@ import (
 
 // Game configuration constants
 const (
-	PlayerMissChance = 0.15 // 15% chance for player to miss
-	BeesMissChance   = 0.20 // 20% chance for all bees to miss
-	AutoModeDelay    = 500  // Milliseconds to pause in auto mode
+	// Default values (used when no config is provided)
+	DefaultPlayerMissChance = 0.15 // 15% chance for player to miss
+	DefaultBeesMissChance   = 0.20 // 20% chance for all bees to miss
+	DefaultAutoModeDelay    = 500  // Milliseconds to pause in auto mode
 
-	// Hive composition
-	QueenCount  = 1
-	WorkerCount = 5
-	DroneCount  = 25
-	TotalBees   = QueenCount + WorkerCount + DroneCount
+	// Default hive composition
+	DefaultQueenCount  = 1
+	DefaultWorkerCount = 5
+	DefaultDroneCount  = 25
+	DefaultTotalBees   = DefaultQueenCount + DefaultWorkerCount + DefaultDroneCount
 )
+
+// GameConfig holds configurable game parameters
+type GameConfig struct {
+	PlayerHP         int
+	PlayerMissChance float64
+	BeesMissChance   float64
+	AutoModeDelay    int
+	QueenCount       int
+	WorkerCount      int
+	DroneCount       int
+}
+
+// DefaultConfig returns the default game configuration
+func DefaultConfig() GameConfig {
+	return GameConfig{
+		PlayerHP:         PlayerStartingHP,
+		PlayerMissChance: DefaultPlayerMissChance,
+		BeesMissChance:   DefaultBeesMissChance,
+		AutoModeDelay:    DefaultAutoModeDelay,
+		QueenCount:       DefaultQueenCount,
+		WorkerCount:      DefaultWorkerCount,
+		DroneCount:       DefaultDroneCount,
+	}
+}
 
 // BeeDecision represents a bee's decision to attack or miss
 type BeeDecision struct {
@@ -37,19 +62,28 @@ type Game struct {
 	Turns       int
 	AutoMode    bool
 	rng         *rand.Rand
-	damageEvent chan int // Channel to signal damage events for stats monitoring
+	damageEvent chan int   // Channel to signal damage events for stats monitoring
+	Config      GameConfig // Game configuration
 }
 
-// NewGame sets up a fresh game with a player and a full hive of bees
+// NewGame sets up a fresh game with default configuration
 func NewGame() *Game {
+	return NewGameWithConfig(DefaultConfig())
+}
+
+// NewGameWithConfig sets up a fresh game with custom configuration
+func NewGameWithConfig(config GameConfig) *Game {
+	totalBees := config.QueenCount + config.WorkerCount + config.DroneCount
+
 	game := &Game{
-		Player:      &Player{HP: PlayerStartingHP, MaxHP: PlayerStartingHP},
+		Player:      &Player{HP: config.PlayerHP, MaxHP: config.PlayerHP},
 		Hive:        make(map[BeeType][]*Bee),
-		AliveBees:   make([]*Bee, 0, TotalBees),
+		AliveBees:   make([]*Bee, 0, totalBees),
 		Turns:       0,
 		AutoMode:    false,
 		rng:         rand.New(rand.NewSource(time.Now().UnixNano())),
 		damageEvent: make(chan int, 10), // Buffered channel for damage events
+		Config:      config,
 	}
 
 	game.initializeHive()
@@ -82,26 +116,26 @@ func NewGame() *Game {
 } // initializeHive populates the hive with all the bees according to the game rules
 func (g *Game) initializeHive() {
 	// Initialize the map slices
-	g.Hive[Queen] = make([]*Bee, 0, QueenCount)
-	g.Hive[Worker] = make([]*Bee, 0, WorkerCount)
-	g.Hive[Drone] = make([]*Bee, 0, DroneCount)
+	g.Hive[Queen] = make([]*Bee, 0, g.Config.QueenCount)
+	g.Hive[Worker] = make([]*Bee, 0, g.Config.WorkerCount)
+	g.Hive[Drone] = make([]*Bee, 0, g.Config.DroneCount)
 
 	// Add the Queen Bees
-	for i := 0; i < QueenCount; i++ {
+	for i := 0; i < g.Config.QueenCount; i++ {
 		bee := NewBee(Queen)
 		g.Hive[Queen] = append(g.Hive[Queen], bee)
 		g.AliveBees = append(g.AliveBees, bee)
 	}
 
 	// Add the Worker Bees
-	for i := 0; i < WorkerCount; i++ {
+	for i := 0; i < g.Config.WorkerCount; i++ {
 		bee := NewBee(Worker)
 		g.Hive[Worker] = append(g.Hive[Worker], bee)
 		g.AliveBees = append(g.AliveBees, bee)
 	}
 
 	// Add the Drone Bees
-	for i := 0; i < DroneCount; i++ {
+	for i := 0; i < g.Config.DroneCount; i++ {
 		bee := NewBee(Drone)
 		g.Hive[Drone] = append(g.Hive[Drone], bee)
 		g.AliveBees = append(g.AliveBees, bee)
@@ -189,7 +223,7 @@ func (g *Game) PlayGame() {
 		if g.AutoMode {
 			// Let the computer play automatically
 			g.PlayerTurn("hit")
-			time.Sleep(AutoModeDelay * time.Millisecond) // Small pause so you can follow along
+			time.Sleep(time.Duration(g.Config.AutoModeDelay) * time.Millisecond) // Small pause so you can follow along
 		} else {
 			// Wait for the player to tell us what to do
 			fmt.Print("\nEnter command (hit/auto/quit): ")
@@ -246,7 +280,7 @@ func (g *Game) PlayerAttack() {
 	}
 
 	// Sometimes you miss completely
-	if g.rng.Float64() < PlayerMissChance {
+	if g.rng.Float64() < g.Config.PlayerMissChance {
 		fmt.Println("Miss! You just missed the hive, better luck next time!")
 		return
 	}
@@ -365,7 +399,7 @@ func (g *Game) makeBeeDecision(bee *Bee) BeeDecision {
 	time.Sleep(thinkingTime)
 
 	// Make the hit/miss decision
-	willHit := g.rng.Float64() >= BeesMissChance
+	willHit := g.rng.Float64() >= g.Config.BeesMissChance
 
 	return BeeDecision{
 		Bee:          bee,
@@ -399,7 +433,8 @@ func (g *Game) EndGame() {
 	fmt.Printf("Final player HP: %d/%d\n", g.Player.HP, g.Player.MaxHP)
 
 	aliveBees := g.GetAliveBees()
-	fmt.Printf("Bees remaining: %d/31\n", len(aliveBees))
+	totalBees := g.Config.QueenCount + g.Config.WorkerCount + g.Config.DroneCount
+	fmt.Printf("Bees remaining: %d/%d\n", len(aliveBees), totalBees)
 
 	if len(aliveBees) > 0 {
 		queens := g.GetBeesByType(Queen)
