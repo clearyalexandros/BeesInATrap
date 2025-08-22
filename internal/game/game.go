@@ -31,26 +31,53 @@ type BeeDecision struct {
 }
 
 type Game struct {
-	Player    *Player            // Use pointer so we can modify the player
-	Hive      map[BeeType][]*Bee // Map structure enables O(1) access to bees by type
-	AliveBees []*Bee             // Cached slice avoids O(n) scanning on each access
-	Turns     int
-	AutoMode  bool
-	rng       *rand.Rand
+	Player      *Player            // Use pointer so we can modify the player
+	Hive        map[BeeType][]*Bee // Map structure enables O(1) access to bees by type
+	AliveBees   []*Bee             // Cached slice avoids O(n) scanning on each access
+	Turns       int
+	AutoMode    bool
+	rng         *rand.Rand
+	damageEvent chan int // Channel to signal damage events for stats monitoring
 }
 
 // NewGame sets up a fresh game with a player and a full hive of bees
 func NewGame() *Game {
 	game := &Game{
-		Player:    &Player{HP: PlayerStartingHP, MaxHP: PlayerStartingHP},
-		Hive:      make(map[BeeType][]*Bee),
-		AliveBees: make([]*Bee, 0, TotalBees),
-		Turns:     0,
-		AutoMode:  false,
-		rng:       rand.New(rand.NewSource(time.Now().UnixNano())),
+		Player:      &Player{HP: PlayerStartingHP, MaxHP: PlayerStartingHP},
+		Hive:        make(map[BeeType][]*Bee),
+		AliveBees:   make([]*Bee, 0, TotalBees),
+		Turns:       0,
+		AutoMode:    false,
+		rng:         rand.New(rand.NewSource(time.Now().UnixNano())),
+		damageEvent: make(chan int, 10), // Buffered channel for damage events
 	}
 
 	game.initializeHive()
+
+	// Start event-driven game stats monitor
+	go func() {
+		for damage := range game.damageEvent {
+			if game.Turns > 0 { // Only show stats after game starts
+				aliveBees := len(game.GetAliveBees())
+				survivalRate := float64(game.Player.HP) / float64(game.Player.MaxHP) * 100
+
+				// Show different messages based on damage severity
+				var damageIcon string
+				switch {
+				case damage >= 10:
+					damageIcon = "🩸" // High damage
+				case damage >= 5:
+					damageIcon = "⚡" // Medium damage
+				default:
+					damageIcon = "🔸" // Low damage
+				}
+
+				fmt.Printf("%s Damage Alert: -%d HP | Turn %d | Player: %d/%d (%.1f%%) | Bees: %d\n",
+					damageIcon, damage, game.Turns, game.Player.HP, game.Player.MaxHP, survivalRate, aliveBees)
+			}
+		}
+	}()
+
 	return game
 } // initializeHive populates the hive with all the bees according to the game rules
 func (g *Game) initializeHive() {
@@ -297,9 +324,16 @@ func (g *Game) BeeTurn() {
 		chosenAttack := hits[g.rng.Intn(len(hits))]
 		fmt.Printf("Sting! You just got stung by a %s bee!\n", chosenAttack.Bee.Type.String())
 
-		g.Player.TakeDamage(chosenAttack.Bee.Damage)
-		fmt.Printf("You took %d damage and now have %d HP remaining.\n",
-			chosenAttack.Bee.Damage, g.Player.HP)
+		damage := chosenAttack.Bee.Damage
+		g.Player.TakeDamage(damage)
+		fmt.Printf("You took %d damage and now have %d HP remaining.\n", damage, g.Player.HP)
+
+		// Trigger damage event for stats monitoring
+		select {
+		case g.damageEvent <- damage:
+		default:
+			// Channel full, skip this event (non-blocking)
+		}
 
 		if !g.Player.IsAlive() {
 			fmt.Println("💀 You have been stung to death! 💀")
