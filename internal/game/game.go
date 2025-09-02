@@ -62,8 +62,8 @@ type Game struct {
 	Turns       int
 	AutoMode    bool
 	rng         *rand.Rand
-	damageEvent chan int   // Channel to signal damage events for stats monitoring
-	Config      GameConfig // Game configuration
+	damageEvent chan int     // Channel to signal damage events for stats monitoring
+	Config      GameConfig   // Game configuration
 	mu          sync.RWMutex // Protects shared game state from concurrent access
 }
 
@@ -98,7 +98,7 @@ func NewGameWithConfig(config GameConfig) *Game {
 			playerHP := game.Player.HP
 			playerMaxHP := game.Player.MaxHP
 			game.mu.RUnlock()
-			
+
 			if turns > 0 { // Only show stats after game starts
 				// Calculate values without holding lock to avoid deadlock
 				aliveBees := len(game.GetAliveBees())
@@ -155,7 +155,7 @@ func (g *Game) initializeHive() {
 func (g *Game) GetAliveBees() []*Bee {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	
+
 	return g.getAliveBeesUnsafe()
 }
 
@@ -176,7 +176,7 @@ func (g *Game) getAliveBeesUnsafe() []*Bee {
 func (g *Game) GetBeesByType(beeType BeeType) []*Bee {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	
+
 	var bees []*Bee
 	for _, bee := range g.Hive[beeType] {
 		if bee.IsAlive() {
@@ -190,7 +190,7 @@ func (g *Game) GetBeesByType(beeType BeeType) []*Bee {
 func (g *Game) IsGameOver() bool {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	
+
 	// Player is dead
 	if !g.Player.IsAlive() {
 		return true
@@ -205,7 +205,7 @@ func (g *Game) IsGameOver() bool {
 func (g *Game) KillAllBees() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	
+
 	for _, beeList := range g.Hive {
 		for _, bee := range beeList {
 			if bee.IsAlive() {
@@ -223,7 +223,7 @@ func (g *Game) PrintGameStatus() {
 	playerMaxHP := g.Player.MaxHP
 	turns := g.Turns
 	g.mu.RUnlock()
-	
+
 	fmt.Printf("\n=== Game Status ===\n")
 	fmt.Printf("Player HP: %d/%d\n", playerHP, playerMaxHP)
 
@@ -299,7 +299,7 @@ func (g *Game) PlayerTurn(command string) {
 	g.Turns++
 	currentTurn := g.Turns
 	g.mu.Unlock()
-	
+
 	fmt.Printf("\n--- Turn %d: Player Turn ---\n", currentTurn)
 
 	if command == "hit" {
@@ -347,7 +347,7 @@ func (g *Game) BeeTurn() {
 	g.mu.RLock()
 	currentTurn := g.Turns
 	g.mu.RUnlock()
-	
+
 	fmt.Printf("\n--- Turn %d: Bees Turn ---\n", currentTurn)
 
 	aliveBees := g.GetAliveBees()
@@ -399,14 +399,14 @@ func (g *Game) BeeTurn() {
 		fmt.Printf("Sting! You just got stung by a %s bee!\n", chosenAttack.Bee.Type.String())
 
 		damage := chosenAttack.Bee.Damage
-		
+
 		// Thread-safe player damage application
 		g.mu.Lock()
 		g.Player.TakeDamage(damage)
 		playerHP := g.Player.HP
 		playerAlive := g.Player.IsAlive()
 		g.mu.Unlock()
-		
+
 		fmt.Printf("You took %d damage and now have %d HP remaining.\n", damage, playerHP)
 
 		// Trigger damage event for stats monitoring
@@ -472,7 +472,7 @@ func (g *Game) EndGame() {
 	playerMaxHP := g.Player.MaxHP
 	totalBees := g.Config.QueenCount + g.Config.WorkerCount + g.Config.DroneCount
 	g.mu.RUnlock()
-	
+
 	fmt.Println("\n" + strings.Repeat("=", 50))
 	fmt.Println("                 GAME OVER")
 	fmt.Println(strings.Repeat("=", 50))
@@ -491,8 +491,6 @@ func (g *Game) EndGame() {
 	fmt.Printf("Final player HP: %d/%d\n", playerHP, playerMaxHP)
 
 	aliveBees := g.GetAliveBees()
-
-	totalBees := g.Config.QueenCount + g.Config.WorkerCount + g.Config.DroneCount
 	fmt.Printf("Bees remaining: %d/%d\n", len(aliveBees), totalBees)
 
 	if len(aliveBees) > 0 {
