@@ -64,6 +64,7 @@ type Game struct {
 	rng         *rand.Rand
 	damageEvent chan int   // Channel to signal damage events for stats monitoring
 	Config      GameConfig // Game configuration
+	mu          sync.RWMutex // Protects shared game state from concurrent access
 }
 
 // NewGame sets up a fresh game with default configuration
@@ -91,9 +92,17 @@ func NewGameWithConfig(config GameConfig) *Game {
 	// Start event-driven game stats monitor
 	go func() {
 		for damage := range game.damageEvent {
-			if game.Turns > 0 { // Only show stats after game starts
+			// Safely read game state with read lock
+			game.mu.RLock()
+			turns := game.Turns
+			playerHP := game.Player.HP
+			playerMaxHP := game.Player.MaxHP
+			game.mu.RUnlock()
+			
+			if turns > 0 { // Only show stats after game starts
+				// Calculate values without holding lock to avoid deadlock
 				aliveBees := len(game.GetAliveBees())
-				survivalRate := float64(game.Player.HP) / float64(game.Player.MaxHP) * 100
+				survivalRate := float64(playerHP) / float64(playerMaxHP) * 100
 
 				// Show different messages based on damage severity
 				var damageIcon string
@@ -107,7 +116,7 @@ func NewGameWithConfig(config GameConfig) *Game {
 				}
 
 				fmt.Printf("%s Damage Alert: -%d HP | Turn %d | Player: %d/%d (%.1f%%) | Bees: %d\n",
-					damageIcon, damage, game.Turns, game.Player.HP, game.Player.MaxHP, survivalRate, aliveBees)
+					damageIcon, damage, turns, playerHP, playerMaxHP, survivalRate, aliveBees)
 			}
 		}
 	}()
@@ -144,6 +153,14 @@ func (g *Game) initializeHive() {
 
 // GetAliveBees gives you all the bees that are still alive
 func (g *Game) GetAliveBees() []*Bee {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	
+	return g.getAliveBeesUnsafe()
+}
+
+// getAliveBeesUnsafe is an internal helper that assumes the caller holds the mutex
+func (g *Game) getAliveBeesUnsafe() []*Bee {
 	// Rebuild the alive list by filtering out dead bees
 	aliveBees := make([]*Bee, 0, len(g.AliveBees))
 	for _, bee := range g.AliveBees {
@@ -157,6 +174,9 @@ func (g *Game) GetAliveBees() []*Bee {
 
 // GetBeesByType finds all living bees of a particular type (O(1) map access to type group)
 func (g *Game) GetBeesByType(beeType BeeType) []*Bee {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	
 	var bees []*Bee
 	for _, bee := range g.Hive[beeType] {
 		if bee.IsAlive() {
@@ -168,18 +188,24 @@ func (g *Game) GetBeesByType(beeType BeeType) []*Bee {
 
 // IsGameOver checks if someone has won or lost the game
 func (g *Game) IsGameOver() bool {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	
 	// Player is dead
 	if !g.Player.IsAlive() {
 		return true
 	}
 
-	// All bees are dead
-	aliveBees := g.GetAliveBees()
+	// All bees are dead - use internal method to avoid double locking
+	aliveBees := g.getAliveBeesUnsafe()
 	return len(aliveBees) == 0
 }
 
 // KillAllBees wipes out the entire hive (happens when the Queen dies)
 func (g *Game) KillAllBees() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	
 	for _, beeList := range g.Hive {
 		for _, bee := range beeList {
 			if bee.IsAlive() {
@@ -192,8 +218,14 @@ func (g *Game) KillAllBees() {
 
 // PrintGameStatus shows the current state of the battle
 func (g *Game) PrintGameStatus() {
+	g.mu.RLock()
+	playerHP := g.Player.HP
+	playerMaxHP := g.Player.MaxHP
+	turns := g.Turns
+	g.mu.RUnlock()
+	
 	fmt.Printf("\n=== Game Status ===\n")
-	fmt.Printf("Player HP: %d/%d\n", g.Player.HP, g.Player.MaxHP)
+	fmt.Printf("Player HP: %d/%d\n", playerHP, playerMaxHP)
 
 	queens := g.GetBeesByType(Queen)
 	workers := g.GetBeesByType(Worker)
@@ -203,7 +235,7 @@ func (g *Game) PrintGameStatus() {
 	fmt.Printf("  Queens: %d\n", len(queens))
 	fmt.Printf("  Workers: %d\n", len(workers))
 	fmt.Printf("  Drones: %d\n", len(drones))
-	fmt.Printf("Turns: %d\n", g.Turns)
+	fmt.Printf("Turns: %d\n", turns)
 	fmt.Println("==================")
 }
 
@@ -263,8 +295,12 @@ func (g *Game) PlayGame() {
 
 // PlayerTurn lets the player do something on their turn
 func (g *Game) PlayerTurn(command string) {
+	g.mu.Lock()
 	g.Turns++
-	fmt.Printf("\n--- Turn %d: Player Turn ---\n", g.Turns)
+	currentTurn := g.Turns
+	g.mu.Unlock()
+	
+	fmt.Printf("\n--- Turn %d: Player Turn ---\n", currentTurn)
 
 	if command == "hit" {
 		g.PlayerAttack()
@@ -308,7 +344,11 @@ func (g *Game) PlayerAttack() {
 
 // BeeTurn makes the bees attack back using concurrent decision making
 func (g *Game) BeeTurn() {
-	fmt.Printf("\n--- Turn %d: Bees Turn ---\n", g.Turns)
+	g.mu.RLock()
+	currentTurn := g.Turns
+	g.mu.RUnlock()
+	
+	fmt.Printf("\n--- Turn %d: Bees Turn ---\n", currentTurn)
 
 	aliveBees := g.GetAliveBees()
 	if len(aliveBees) == 0 {
@@ -359,8 +399,15 @@ func (g *Game) BeeTurn() {
 		fmt.Printf("Sting! You just got stung by a %s bee!\n", chosenAttack.Bee.Type.String())
 
 		damage := chosenAttack.Bee.Damage
+		
+		// Thread-safe player damage application
+		g.mu.Lock()
 		g.Player.TakeDamage(damage)
-		fmt.Printf("You took %d damage and now have %d HP remaining.\n", damage, g.Player.HP)
+		playerHP := g.Player.HP
+		playerAlive := g.Player.IsAlive()
+		g.mu.Unlock()
+		
+		fmt.Printf("You took %d damage and now have %d HP remaining.\n", damage, playerHP)
 
 		// Trigger damage event for stats monitoring
 		select {
@@ -369,7 +416,7 @@ func (g *Game) BeeTurn() {
 			// Channel full, skip this event (non-blocking)
 		}
 
-		if !g.Player.IsAlive() {
+		if !playerAlive {
 			fmt.Println("💀 You have been stung to death! 💀")
 		}
 	} else if len(misses) > 0 {
@@ -384,22 +431,25 @@ func (g *Game) BeeTurn() {
 func (g *Game) makeBeeDecision(bee *Bee) BeeDecision {
 	start := time.Now()
 
+	// Create local RNG for this goroutine to avoid race conditions
+	localRng := rand.New(rand.NewSource(time.Now().UnixNano()))
+
 	// Simulate different thinking times based on bee type
 	var thinkingTime time.Duration
 	switch bee.Type {
 	case Queen:
-		thinkingTime = time.Duration(50+g.rng.Intn(100)) * time.Millisecond // 50-150ms
+		thinkingTime = time.Duration(50+localRng.Intn(100)) * time.Millisecond // 50-150ms
 	case Worker:
-		thinkingTime = time.Duration(20+g.rng.Intn(60)) * time.Millisecond // 20-80ms
+		thinkingTime = time.Duration(20+localRng.Intn(60)) * time.Millisecond // 20-80ms
 	case Drone:
-		thinkingTime = time.Duration(10+g.rng.Intn(40)) * time.Millisecond // 10-50ms
+		thinkingTime = time.Duration(10+localRng.Intn(40)) * time.Millisecond // 10-50ms
 	}
 
 	// Simulate thinking
 	time.Sleep(thinkingTime)
 
-	// Make the hit/miss decision
-	willHit := g.rng.Float64() >= g.Config.BeesMissChance
+	// Make the hit/miss decision using local RNG
+	willHit := localRng.Float64() >= g.Config.BeesMissChance
 
 	return BeeDecision{
 		Bee:          bee,
@@ -415,25 +465,32 @@ func (g *Game) getDamageDealtTo(beeType BeeType) int {
 
 // EndGame shows the final results and says goodbye
 func (g *Game) EndGame() {
+	g.mu.RLock()
+	playerAlive := g.Player.IsAlive()
+	turns := g.Turns
+	playerHP := g.Player.HP
+	playerMaxHP := g.Player.MaxHP
+	totalBees := g.Config.QueenCount + g.Config.WorkerCount + g.Config.DroneCount
+	g.mu.RUnlock()
+	
 	fmt.Println("\n" + strings.Repeat("=", 50))
 	fmt.Println("                 GAME OVER")
 	fmt.Println(strings.Repeat("=", 50))
 
-	if g.Player.IsAlive() {
+	if playerAlive {
 		fmt.Println("🎉 CONGRATULATIONS! YOU WON! 🎉")
-		fmt.Printf("You successfully destroyed the hive in %d turns!\n", g.Turns)
+		fmt.Printf("You successfully destroyed the hive in %d turns!\n", turns)
 	} else {
 		fmt.Println("💀 GAME OVER - YOU DIED 💀")
-		fmt.Printf("The bees defeated you after %d turns.\n", g.Turns)
+		fmt.Printf("The bees defeated you after %d turns.\n", turns)
 	}
 
 	// Show how the battle went
 	fmt.Println("\n--- GAME SUMMARY ---")
-	fmt.Printf("Total turns: %d\n", g.Turns)
-	fmt.Printf("Final player HP: %d/%d\n", g.Player.HP, g.Player.MaxHP)
+	fmt.Printf("Total turns: %d\n", turns)
+	fmt.Printf("Final player HP: %d/%d\n", playerHP, playerMaxHP)
 
 	aliveBees := g.GetAliveBees()
-	totalBees := g.Config.QueenCount + g.Config.WorkerCount + g.Config.DroneCount
 	fmt.Printf("Bees remaining: %d/%d\n", len(aliveBees), totalBees)
 
 	if len(aliveBees) > 0 {
