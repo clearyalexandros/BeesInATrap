@@ -491,6 +491,8 @@ func (g *Game) EndGame() {
 	fmt.Printf("Final player HP: %d/%d\n", playerHP, playerMaxHP)
 
 	aliveBees := g.GetAliveBees()
+
+	totalBees := g.Config.QueenCount + g.Config.WorkerCount + g.Config.DroneCount
 	fmt.Printf("Bees remaining: %d/%d\n", len(aliveBees), totalBees)
 
 	if len(aliveBees) > 0 {
